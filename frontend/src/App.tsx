@@ -25,7 +25,7 @@ function App() {
     try {
       console.log("Making API request to Gemini backend...");
   
-      const response = await axios.post("http://localhost:5000/api/gemini", {
+      const response = await axios.post("https://waste-ai-krjb.onrender.com/api/gemini", {
         contents: [
           {
             parts: [
