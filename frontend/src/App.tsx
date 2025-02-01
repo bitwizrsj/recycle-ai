@@ -1,11 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Recycle, Loader2, X, Sun, Moon, MessageSquare, Send, PlusCircle, Clock, ChevronRight, Leaf, Wind, Droplets } from 'lucide-react';
-
-import axios from 'axios';
+import { Search, Recycle, Loader2, X, Sun, Moon, MessageSquare, Send, PlusCircle, Clock, ChevronRight, Leaf, Wind, Droplets, Upload, Menu } from 'lucide-react';
 
 interface RecyclingItem {
   id: string;
   name: string;
+  imageUrl?: string;
 }
 
 interface RecyclingInstruction {
@@ -71,14 +70,15 @@ function App() {
   const [items, setItems] = useState<RecyclingItem[]>([{ id: '1', name: '' }]);
   const [additionalNotes, setAdditionalNotes] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [showNotification, setShowNotification] = useState(false);
   const [history, setHistory] = useState<RecyclingInstruction[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [currentInput, setCurrentInput] = useState('');
   const [showItemsInput, setShowItemsInput] = useState(true);
   const [hasInitialResponse, setHasInitialResponse] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
-  // Theme handling
   useEffect(() => {
     const savedTheme = localStorage.getItem('theme') as 'light' | 'dark' || 'dark';
     setTheme(savedTheme);
@@ -92,7 +92,6 @@ function App() {
     document.documentElement.classList.toggle('dark');
   };
 
-  // Fetch history from localStorage
   useEffect(() => {
     const savedHistory = localStorage.getItem('recyclingHistory');
     if (savedHistory) {
@@ -100,12 +99,17 @@ function App() {
     }
   }, []);
 
-  // Save history to localStorage
   useEffect(() => {
     if (history.length > 0) {
       localStorage.setItem('recyclingHistory', JSON.stringify(history));
     }
   }, [history]);
+
+  const handleUploadClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setShowNotification(true);
+    setTimeout(() => setShowNotification(false), 3000);
+  };
 
   const handleItemChange = (id: string, value: string) => {
     setItems(prevItems => {
@@ -148,16 +152,29 @@ function App() {
     ]);
     setShowItemsInput(false);
     setHasInitialResponse(true);
+    setIsSidebarOpen(false);
   };
 
   const fetchWithRetry = async (prompt: string, retryCount = 0): Promise<string> => {
     try {
-      const response = await axios.post("https://waste-ai-krjb.onrender.com/api/gemini", {
-        contents: [{ parts: [{ text: prompt }] }],
+      const response = await fetch("https://waste-ai-krjb.onrender.com/api/gemini", {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+        }),
       });
-      return response.data.candidates?.[0]?.content?.parts?.[0]?.text || "No instructions found.";
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      return data.candidates?.[0]?.content?.parts?.[0]?.text || "No instructions found.";
     } catch (err) {
-      if (axios.isAxiosError(err) && err.response?.status === 429 && retryCount < MAX_RETRIES) {
+      if (err instanceof Error && err.message.includes('429') && retryCount < MAX_RETRIES) {
         await sleep(RETRY_DELAY * Math.pow(2, retryCount));
         return fetchWithRetry(prompt, retryCount + 1);
       }
@@ -233,6 +250,7 @@ function App() {
     setAdditionalNotes('');
     setShowItemsInput(true);
     setHasInitialResponse(false);
+    setIsSidebarOpen(false);
   };
 
   return (
@@ -267,13 +285,23 @@ function App() {
           animation: pulse-slower 6s ease-in-out infinite;
         }
       `}</style>
+      
       <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-blue-50 to-teal-50 dark:from-emerald-900 dark:via-blue-900 dark:to-teal-900 text-gray-900 dark:text-white transition-colors duration-200">
-        {/* Decorative elements */}
         <BackgroundElements />
-
+        
         <div className="flex h-screen relative">
+          {/* Mobile Menu Button */}
+          <button
+            onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+            className="lg:hidden fixed top-4 left-4 z-50 p-2 bg-white/90 dark:bg-gray-800/90 rounded-lg shadow-lg backdrop-blur-sm"
+          >
+            {isSidebarOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+          </button>
+
           {/* Sidebar */}
-          <div className="w-80 bg-white/90 dark:bg-gray-800/90 backdrop-blur-md border-r border-green-100 dark:border-green-900/50 flex flex-col">
+          <div className={`fixed lg:relative w-80 bg-white/90 dark:bg-gray-800/90 backdrop-blur-md border-r border-green-100 dark:border-green-900/50 flex flex-col h-full transition-transform duration-300 ease-in-out z-40 ${
+            isSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
+          }`}>
             <div className="p-4 border-b border-green-100 dark:border-green-900/50">
               <button
                 onClick={handleNewChat}
@@ -312,7 +340,6 @@ function App() {
                             <p className="font-medium truncate">
                               {entry.items.map(i => i.name).join(', ')}
                             </p>
-                            
                           </div>
                         </div>
                         <Wind className="w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity text-emerald-500" />
@@ -325,7 +352,10 @@ function App() {
           </div>
 
           {/* Main Chat Area */}
+          
           <div className="flex-1 flex flex-col bg-transparent">
+          <nav className='p-4 text-xl font-bold text-center bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 flex flex-col'><h1>Recycle AI</h1>
+          </nav>
             {/* Messages */}
             <div className="flex-1 overflow-y-auto p-6 space-y-6">
               {messages.map((message, index) => (
@@ -365,29 +395,52 @@ function App() {
 
             {/* Input Area */}
             <div className="border-t border-green-100 dark:border-green-900/50 bg-white/90 dark:bg-gray-800/90 backdrop-blur-md p-6">
+              {showNotification && (
+                <div className="fixed top-4 right-4 bg-gray-800 text-white px-6 py-3 rounded-lg shadow-lg transform transition-all duration-300 ease-in-out z-50">
+                  Working on this feature
+                </div>
+              )}
               {showItemsInput ? (
                 <div className="space-y-4">
                   {items.map((item, index) => (
                     <div key={item.id} className="relative">
-                      <input
-                        type="text"
-                        value={item.name}
-                        onChange={(e) => handleItemChange(item.id, e.target.value)}
-                        placeholder={`Item ${index + 1} to upcycle`}
-                        className="w-full p-4 rounded-xl bg-white/50 dark:bg-gray-900/50 border border-green-100 dark:border-green-900/50 focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all shadow-sm hover:shadow-md backdrop-blur-sm"
-                        disabled={isLoading}
-                      />
-                      {index > 0 && (
-                        <button
-                          type="button"
-                          onClick={() => removeItem(item.id)}
-                          className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-red-500 transition-colors"
-                        >
-                          <X className="h-5 w-5" />
-                        </button>
-                      )}
+                      <div className="flex gap-4">
+                        <div className="flex-1 relative">
+                          <input
+                            type="text"
+                            value={item.name}
+                            onChange={(e) => handleItemChange(item.id, e.target.value)}
+                            placeholder={`Item ${index + 1} to upcycle`}
+                            className="w-full pl-4 pr-12 py-4 rounded-xl bg-white/50 dark:bg-gray-900/50 border border-green-100 dark:border-green-900/50 focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all shadow-sm hover:shadow-md backdrop-blur-sm"
+                            disabled={isLoading}
+                          />
+                          
+                          <label className="absolute right-3 top-1/2 -translate-y-1/2 cursor-pointer">
+                            <input
+                              type="file"
+                              accept="image/*"
+                              className="hidden"
+                              onClick={handleUploadClick}
+                            />
+                            <div className="p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
+                              <Upload className="w-5 h-5 text-gray-400 hover:text-emerald-500 transition-colors" />
+                            </div>
+                          </label>
+                        </div>
+                        
+                        {index > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => removeItem(item.id)}
+                            className="p-4 text-gray-400 hover:text-red-500 transition-colors bg-white/50 dark:bg-gray-900/50 rounded-xl border border-green-100 dark:border-green-900/50"
+                          >
+                            <X className="h-5 w-5" />
+                          </button>
+                        )}
+                      </div>
                     </div>
                   ))}
+
                   <textarea
                     value={additionalNotes}
                     onChange={(e) => setAdditionalNotes(e.target.value)}
